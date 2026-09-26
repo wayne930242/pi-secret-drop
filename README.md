@@ -43,6 +43,21 @@ pi install git:github.com/wayne930242/pi-secret-drop
 
 The package ships the extension and a `secret-drop` skill that teaches the agent to use it and to let programs consume secret files.
 
+### Recommended: pair with cc-safety-net
+
+Use pi-secret-drop together with [cc-safety-net](https://github.com/kenryu42/cc-safety-net) ([pi installation](https://ccsafetynet.com/docs/installation#pi-installation)):
+
+```bash
+pi install npm:cc-safety-net
+```
+
+The two cover different halves of the problem:
+
+- **cc-safety-net keeps the agent out of secrets that already exist.** It blocks the agent's shell and file tools from reading `.env` files, SSH keys, `~/.aws`, and other well-known credential locations, whether or not pi-secret-drop wrote them.
+- **pi-secret-drop gets new secrets in without the agent seeing them.** It protects the destinations it writes, including files outside cc-safety-net's patterns such as `config.yml`, and redacts the values from tool output.
+
+They do not conflict. cc-safety-net inspects the agent's tool calls; the apply command is the user's own `!` command, so the write goes through while the agent stays blocked from reading the result.
+
 ## Tool: `secret_drop`
 
 | Parameter | Meaning |
