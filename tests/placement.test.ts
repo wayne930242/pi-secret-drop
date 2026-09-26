@@ -55,3 +55,20 @@ test("checkValue rejects empty and multi-line values outside file mode", () => {
 test("invalid env key is rejected", () => {
 	assert.throws(() => validatePlacement(env("1BAD"), undefined), /Invalid env key/);
 });
+
+test("env replacement keeps trailing comments and CRLF line endings", () => {
+	const before = "A=1\r\nTOKEN=old # rotated monthly\r\nQ=\"x y\" # quoted\r\n";
+	const first = applyPlacement(before, env("TOKEN"), "it's new").content;
+	assert.equal(first, "A=1\r\nTOKEN=\"it's new\" # rotated monthly\r\nQ=\"x y\" # quoted\r\n");
+	assert.equal(extractSecret(first, env("TOKEN")), "it's new");
+	const second = applyPlacement(first, env("Q"), "a#b c");
+	assert.equal(extractSecret(second.content, env("Q")), "a#b c");
+	assert.match(second.content, /^Q='a#b c' # quoted\r$/m);
+	assert.ok(verifyPlaced(second.content, env("Q"), "a#b c"));
+});
+
+test("file placement refuses an existing destination unless overwrite is set", () => {
+	assert.throws(() => validatePlacement({ mode: "file" }, "old"), /replace all of it/);
+	validatePlacement({ mode: "file" }, "old", true);
+	validatePlacement({ mode: "file" }, undefined);
+});

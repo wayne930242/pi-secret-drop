@@ -7,10 +7,11 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { access } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
-import { checkValue, describePlacement, extractSecret, type Placement, validateSyntax } from "../lib/placement.mjs";
+import { checkOverwrite, checkValue, describePlacement, extractSecret, type Placement, validateSyntax } from "../lib/placement.mjs";
 import { parseFileMode, readExisting } from "../lib/write.mjs";
 import { canonicalPath, checkToolCall } from "./guard.ts";
 import { Redactor } from "./redact.ts";
@@ -57,6 +58,12 @@ const Params = Type.Object({
 	fileMode: Type.Optional(
 		Type.String({ description: "env/regex/file: octal permissions such as '600'. Default: 600 for new files, unchanged otherwise." }),
 	),
+	overwrite: Type.Optional(
+		Type.Boolean({
+			description:
+				"file: allow replacing an existing destination. Use only for single-value files such as keys or password files; change one value in a multi-value file with env or regex.",
+		}),
+	),
 	command: Type.Optional(
 		Type.String({
 			description:
@@ -73,10 +80,20 @@ interface DropParams {
 	regex?: string;
 	flags?: string;
 	fileMode?: string;
+	overwrite?: boolean;
 	command?: string;
 }
 
-function buildPlan(params: DropParams, cwd: string): ApplyPlan {
+async function exists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function buildPlan(params: DropParams, cwd: string): Promise<ApplyPlan> {
 	const format = params.format ?? (params.key ? "env" : params.command ? "command" : "file");
 	if (format === "command") {
 		if (!params.command) throw new Error("format=command requires `command`.");
@@ -96,7 +113,11 @@ function buildPlan(params: DropParams, cwd: string): ApplyPlan {
 	}
 	validateSyntax(placement);
 	parseFileMode(params.fileMode);
-	return { format: "placement", destination: canonicalPath(params.destination, cwd), placement, fileMode: params.fileMode };
+	const destination = canonicalPath(params.destination, cwd);
+	const overwrite = params.overwrite === true;
+	const refused = checkOverwrite(placement, await exists(destination), overwrite);
+	if (refused) throw new Error(refused);
+	return { format: "placement", destination, placement, fileMode: params.fileMode, overwrite };
 }
 
 export default function secretDrop(pi: ExtensionAPI) {
@@ -163,7 +184,9 @@ export default function secretDrop(pi: ExtensionAPI) {
 			if (ctx.mode !== "tui") {
 				throw new Error("secret_drop needs the interactive terminal UI; ask the user to write the secret themselves.");
 			}
-			const plan = buildPlan(params, ctx.cwd);
+			const plan = await buildPlan(params, ctx.cwd);
+			const replacesFile =
+				plan.format === "placement" && plan.placement.mode === "file" && plan.overwrite === true && (await exists(plan.destination));
 			const staged = newStagedPath(stagingDir);
 			const command = `! ${buildApplyCommand(APPLY_SCRIPT, staged, plan, ctx.cwd)}`;
 			const target =
@@ -186,6 +209,7 @@ export default function secretDrop(pi: ExtensionAPI) {
 									["Into", target],
 									["Then run", command],
 								],
+								warning: replacesFile ? "Replaces the entire existing file" : undefined,
 								footer: "The value is staged outside the project; the prefilled ! command applies it. The agent never receives it.",
 								check,
 							},

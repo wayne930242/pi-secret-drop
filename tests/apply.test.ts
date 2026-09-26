@@ -87,6 +87,25 @@ test("exec: {secret} is the staged path, stdout is suppressed, stderr is redacte
 	assert.ok(!failed.stderr.includes(SECRET));
 });
 
+test("file: an existing destination is kept unless the command carries --overwrite", () => {
+	const { dir, staged } = setup();
+	writeFileSync(join(dir, ".env"), "A=1\nB=2\n");
+	const plan = { format: "placement" as const, destination: join(dir, ".env"), placement: { mode: "file" as const } };
+	const refused = runPrefilled(buildApplyCommand(script, staged, plan, dir), dir);
+	assert.equal(refused.status, 1);
+	assert.match(refused.stderr, /replace all of it/);
+	assert.equal(readFileSync(join(dir, ".env"), "utf8"), "A=1\nB=2\n");
+	assert.equal(existsSync(staged), false);
+
+	const second = setup();
+	writeFileSync(join(second.dir, "tls.key"), "OLD");
+	const line = buildApplyCommand(script, second.staged, { ...plan, destination: join(second.dir, "tls.key"), overwrite: true }, second.dir);
+	assert.match(line, / file \.\/tls\.key --overwrite --from /);
+	const run = runPrefilled(line, second.dir);
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(readFileSync(join(second.dir, "tls.key"), "utf8"), SECRET);
+});
+
 test("rerunning after apply reports the staged value is gone", () => {
 	const { dir, staged } = setup();
 	const line = buildApplyCommand(script, staged, { format: "placement", destination: join(dir, "k"), placement: { mode: "file" } }, dir);

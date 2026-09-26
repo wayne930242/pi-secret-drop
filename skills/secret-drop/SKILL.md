@@ -11,9 +11,9 @@ Secrets reach files and commands through the `secret_drop` tool, so the value ne
 
 1. Pick the destination the consuming program expects. For a `regex` placement in a file that is not yet protected, read its structure first.
 2. Call `secret_drop` with a `label` naming exactly what to enter (service, account, environment) and one format:
-   - `key` + `destination` (format `env`): sets `KEY=value`, replacing existing `KEY` / `export KEY` lines or appending one.
+   - `key` + `destination` (format `env`): sets `KEY=value`, replacing existing `KEY` / `export KEY` lines or appending one. Other lines and trailing comments stay. For a file read by `docker --env-file`, pass `quote: "none"`, since Docker keeps quotes as part of the value.
    - `format: "regex"` + `destination` + `regex`: replaces capture group 1, or the whole match, in an existing file. Make the group cover only the value, e.g. `password: "([^"]*)"`.
-   - `format: "file"` + `destination`: the whole file is the secret, for key files and single-value files.
+   - `format: "file"` + `destination`: the whole file is the secret, for key files and single-value files. An existing destination is refused unless `overwrite: true` is passed; pass it only to rotate a single-value file, never for a multi-value file such as `.env`.
    - `command` (format `command`): a shell command that reads the staged file `{secret}`. Redirect results into files; stdout is discarded. Examples:
      - `ansible-vault encrypt_string --vault-password-file .vault-pass --stdin-name db_password < {secret} >> group_vars/prod/vault.yml`
      - `gh secret set DEPLOY_TOKEN < {secret}`

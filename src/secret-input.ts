@@ -24,6 +24,8 @@ export interface SecretPrompt {
 	label: string;
 	/** Labelled facts shown under the label, e.g. the destination and the apply command. */
 	rows: ReadonlyArray<readonly [string, string]>;
+	/** Shown in the error color under the rows, e.g. an overwrite notice. */
+	warning?: string;
 	footer: string;
 	/** Return an error message to keep the dialog open, or undefined to accept. */
 	check: (value: string) => string | undefined;
@@ -145,6 +147,7 @@ export class SecretInput implements Component, Focusable {
 		body.push("");
 		const pad = Math.max(...this.prompt.rows.map(([name]) => name.length)) + 2;
 		for (const [name, value] of this.prompt.rows) wrap(`${t.fg("muted", name.padEnd(pad))}${t.fg("text", value)}`);
+		if (this.prompt.warning) wrap(t.bold(t.fg("error", `⚠ ${this.prompt.warning}`)));
 		body.push("");
 		body.push(`${t.fg("accent", "› ")}${this.field(inner - 2)}`);
 		const chars = [...this.value].length;

@@ -65,12 +65,13 @@ They do not conflict. cc-safety-net inspects the agent's tool calls; the apply c
 | `label` | What the user should enter. |
 | `format` | `env`, `regex`, `file`, or `command`. Defaults to `env` when `key` is set, `command` when `command` is set, else `file`. |
 | `destination` | `env` / `regex` / `file`: target file, relative to the working directory. Missing directories are created. |
-| `key`, `quote` | `env`: variable name and quoting (`auto`, `none`, `single`, `double`). Existing `KEY=` / `export KEY=` lines are replaced; otherwise the line is appended. |
+| `key`, `quote` | `env`: variable name and quoting (`auto`, `none`, `single`, `double`). Existing `KEY=` / `export KEY=` lines are replaced, keeping trailing `# comments` and CRLF endings; otherwise the line is appended. Use `none` for files read by `docker --env-file`, which keeps quotes as part of the value. |
 | `regex`, `flags` | `regex`: replaces capture group 1, or the whole match, in an existing file. `g` replaces every match. |
 | `fileMode` | Octal permissions. New files default to `600`; existing files keep their mode. |
+| `overwrite` | `file`: allow replacing an existing destination, for rotating single-value files such as keys. Without it an existing destination is refused; with it the dialog warns in red. |
 | `command` | `command`: shell command reading the staged file `{secret}`, e.g. `ansible-vault encrypt_string --stdin-name db_password < {secret} >> vault.yml`. Stdout is discarded; stderr is shown with the value redacted when the command fails. |
 
-Writes are atomic (temp file + rename) and verified by re-reading the destination. The staged file is overwritten and deleted after every apply attempt, and when the tool is cancelled or aborted. Staged files left by pi processes that have exited are removed at session start.
+Writes are atomic (temp file + rename) and verified by re-reading the destination. When verification fails, the original content and mode are restored from memory (a newly created file is removed); no backup file is written, so no copy of a secret is left outside the protected destination. The staged file is overwritten and deleted after every apply attempt, and when the tool is cancelled or aborted. Staged files left by pi processes that have exited are removed at session start.
 
 ## Protection after the write
 
@@ -82,6 +83,8 @@ Writes are atomic (temp file + rename) and verified by re-reading the destinatio
 
 - Requires the interactive terminal UI. In RPC, JSON, and print modes the tool fails instead of falling back to a plain-text prompt.
 - The bash guard parses command lines, not programs. It stops accidental reads, not a determined agent: an indirect path (a variable, a glob, a script or `python -c` that prints the file) passes through. Redaction is the second layer for that output.
+- The rename replaces the destination's inode: hard links to it break and the file becomes owned by the user who runs the apply command. Symlinks are resolved and kept.
+- A multi-line quoted `KEY="…` value is replaced on its first line only.
 - Values shorter than 4 characters are not redacted. Values applied with `format: "command"` are redacted for the rest of the session only.
 - The apply command is shown before it runs; review it, since a `command` can send the staged value anywhere.
 

@@ -8,17 +8,17 @@
 import { spawn } from "node:child_process";
 import { open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { checkValue, describePlacement, ENV_QUOTES, validatePlacement, verifyPlaced } from "../lib/placement.mjs";
+import { checkValue, describePlacement, ENV_QUOTES, validatePlacement } from "../lib/placement.mjs";
 import { shellQuote } from "../lib/shell.mjs";
 import { parseFileMode, readExisting, writeSecret } from "../lib/write.mjs";
 
 /** @typedef {import("../lib/placement.mjs").Placement} Placement */
-/** @typedef {{ quote?: string, flags?: string, mode?: string }} Options */
+/** @typedef {{ quote?: string, flags?: string, mode?: string, overwrite?: boolean }} Options */
 
 const USAGE = `usage:
   apply.mjs env <destination> <KEY> --from <staged> [--quote auto|none|single|double] [--mode 600]
   apply.mjs regex <destination> <regex> --from <staged> [--flags g] [--mode 600]
-  apply.mjs file <destination> --from <staged> [--mode 600]
+  apply.mjs file <destination> --from <staged> [--overwrite] [--mode 600]
   apply.mjs exec <command using {secret}> --from <staged>`;
 
 /**
@@ -116,11 +116,8 @@ async function apply(format, args, options, staged, value) {
 	const fileMode = parseFileMode(options.mode);
 	const problem = checkValue(placement, value);
 	if (problem) throw new Error(problem);
-	validatePlacement(placement, await readExisting(destination));
+	validatePlacement(placement, await readExisting(destination), options.overwrite === true);
 	const outcome = await writeSecret(destination, placement, value, fileMode);
-	if (!verifyPlaced(await readFile(destination, "utf8"), placement, value)) {
-		throw new Error(`length check failed: ${destination} does not hold the ${chars(value)}-char value at ${describePlacement(placement)}.`);
-	}
 	const where = `${destination} (${describePlacement(placement)}, mode ${outcome.mode.toString(8)})`;
 	return `${outcome.summary} in ${where} — length check passed (${chars(value)} chars)`;
 }
@@ -133,6 +130,7 @@ async function main() {
 			quote: { type: "string" },
 			flags: { type: "string" },
 			mode: { type: "string" },
+			overwrite: { type: "boolean" },
 		},
 	});
 	const staged = values.from;

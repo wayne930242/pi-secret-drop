@@ -10,7 +10,7 @@ import type { Placement } from "../lib/placement.mjs";
 import { shellQuote } from "../lib/shell.mjs";
 
 export type ApplyPlan =
-	| { format: "placement"; destination: string; placement: Placement; fileMode?: string }
+	| { format: "placement"; destination: string; placement: Placement; fileMode?: string; overwrite?: boolean }
 	| { format: "exec"; command: string };
 
 export interface ApplyResult {
@@ -39,6 +39,7 @@ export function buildApplyCommand(script: string, staged: string, plan: ApplyPla
 		if (placement.mode === "regex") words.push(shellQuote(placement.pattern));
 		if (placement.mode === "env" && placement.quote !== "auto") words.push("--quote", placement.quote);
 		if (placement.mode === "regex" && placement.flags) words.push("--flags", shellQuote(placement.flags));
+		if (plan.overwrite) words.push("--overwrite");
 		if (plan.fileMode) words.push("--mode", shellQuote(plan.fileMode));
 	}
 	words.push("--from", displayPath(staged, cwd));
