@@ -1,47 +1,44 @@
-// @ts-check
 /**
  * Pure placement logic: where a secret goes inside a file, and how to find it again.
- * Plain JavaScript so the apply CLI runs from node_modules without type stripping.
  */
 
-/** @typedef {"auto" | "none" | "single" | "double"} EnvQuote */
-/**
- * @typedef {{ mode: "file" }
- *   | { mode: "env", key: string, quote: EnvQuote }
- *   | { mode: "regex", pattern: string, flags: string }} Placement
- */
-/** @typedef {{ content: string, summary: string }} PlacementResult */
+export type EnvQuote = "auto" | "none" | "single" | "double";
 
-export const ENV_QUOTES = /** @type {const} */ (["auto", "none", "single", "double"]);
+export type Placement =
+	| { mode: "file" }
+	| { mode: "env"; key: string; quote: EnvQuote }
+	| { mode: "regex"; pattern: string; flags: string };
+
+export interface PlacementResult {
+	content: string;
+	summary: string;
+}
+
+export const ENV_QUOTES: readonly EnvQuote[] = ["auto", "none", "single", "double"];
 
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_.]*$/;
 const SAFE_UNQUOTED = /^[A-Za-z0-9_\-.,/:@%+=]*$/;
 
-/** @param {string} text */
-function escapeRegExp(text) {
+function escapeRegExp(text: string): string {
 	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** @param {string} key */
-function envLinePattern(key) {
+function envLinePattern(key: string): RegExp {
 	return new RegExp(`^([ \\t]*(?:export[ \\t]+)?${escapeRegExp(key)}[ \\t]*=)(.*)$`, "gm");
 }
 
 /**
  * Compile the placement regex with match indices so the first capture group can be replaced.
- * @param {string} pattern
- * @param {string} flags
  */
-function compileRegex(pattern, flags) {
+function compileRegex(pattern: string, flags: string): RegExp {
 	const cleaned = [...new Set(flags.replace(/d/g, ""))].join("");
 	return new RegExp(pattern, `${cleaned}d`);
 }
 
 /**
  * Throw when the env key or regex is malformed. Needs no file.
- * @param {Placement} placement
  */
-export function validateSyntax(placement) {
+export function validateSyntax(placement: Placement): void {
 	if (placement.mode === "env" && !ENV_KEY.test(placement.key)) {
 		throw new Error(`Invalid env key "${placement.key}". Use letters, digits, "_" or ".", not starting with a digit.`);
 	}
@@ -49,30 +46,23 @@ export function validateSyntax(placement) {
 		try {
 			compileRegex(placement.pattern, placement.flags);
 		} catch (error) {
-			throw new Error(`Invalid regex: ${/** @type {Error} */ (error).message}`);
+			throw new Error(`Invalid regex: ${(error as Error).message}`);
 		}
 	}
 }
 
 /**
  * Return a message when a file placement would replace an existing file without `overwrite`.
- * @param {Placement} placement
- * @param {boolean} exists
- * @param {boolean} overwrite
- * @returns {string | undefined}
  */
-export function checkOverwrite(placement, exists, overwrite) {
+export function checkOverwrite(placement: Placement, exists: boolean, overwrite: boolean): string | undefined {
 	if (placement.mode !== "file" || !exists || overwrite) return undefined;
 	return "The destination exists and file placement would replace all of it. Use env or regex to change one value; pass overwrite only for single-value files such as keys or password files.";
 }
 
 /**
  * Throw when the placement cannot be applied to `existing` (undefined for a missing file).
- * @param {Placement} placement
- * @param {string | undefined} existing
- * @param {boolean} [overwrite]
  */
-export function validatePlacement(placement, existing, overwrite = false) {
+export function validatePlacement(placement: Placement, existing: string | undefined, overwrite = false): void {
 	validateSyntax(placement);
 	const refused = checkOverwrite(placement, existing !== undefined, overwrite);
 	if (refused) throw new Error(refused);
@@ -83,12 +73,7 @@ export function validatePlacement(placement, existing, overwrite = false) {
 	}
 }
 
-/**
- * @param {EnvQuote} quote
- * @param {string} value
- * @returns {Exclude<EnvQuote, "auto">}
- */
-function resolveQuote(quote, value) {
+function resolveQuote(quote: EnvQuote, value: string): Exclude<EnvQuote, "auto"> {
 	if (quote !== "auto") return quote;
 	if (SAFE_UNQUOTED.test(value)) return "none";
 	return value.includes("'") ? "double" : "single";
@@ -96,11 +81,8 @@ function resolveQuote(quote, value) {
 
 /**
  * Return a message when the placement cannot represent `value`, otherwise undefined.
- * @param {Placement} placement
- * @param {string} value
- * @returns {string | undefined}
  */
-export function checkValue(placement, value) {
+export function checkValue(placement: Placement, value: string): string | undefined {
 	if (value.length === 0) return "Value is empty.";
 	if (placement.mode !== "file" && /[\r\n]/.test(value)) return `${placement.mode} placement needs a single-line value.`;
 	if (placement.mode === "env") {
@@ -111,11 +93,7 @@ export function checkValue(placement, value) {
 	return undefined;
 }
 
-/**
- * @param {string} value
- * @param {EnvQuote} quote
- */
-export function encodeEnvValue(value, quote) {
+export function encodeEnvValue(value: string, quote: EnvQuote): string {
 	switch (resolveQuote(quote, value)) {
 		case "none":
 			return value;
@@ -129,10 +107,8 @@ export function encodeEnvValue(value, quote) {
 /**
  * Split the text after `KEY=` into the value and a trailing ` # comment` outside quotes.
  * The comment keeps its leading whitespace; an unterminated quote yields no comment.
- * @param {string} raw
- * @returns {{ value: string, comment: string }}
  */
-export function splitEnvComment(raw) {
+export function splitEnvComment(raw: string): { value: string; comment: string } {
 	const start = raw.length - raw.trimStart().length;
 	const quote = raw[start];
 	if (quote === "'" || quote === '"') {
@@ -146,8 +122,7 @@ export function splitEnvComment(raw) {
 	return hash === -1 ? { value: raw, comment: "" } : { value: raw.slice(0, hash), comment: raw.slice(hash) };
 }
 
-/** @param {string} raw */
-export function decodeEnvValue(raw) {
+export function decodeEnvValue(raw: string): string {
 	const trimmed = splitEnvComment(raw).value.trim();
 	if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1);
 	if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
@@ -158,12 +133,8 @@ export function decodeEnvValue(raw) {
 
 /**
  * Produce the new file content with the secret placed. `existing` is undefined for a new file.
- * @param {string | undefined} existing
- * @param {Placement} placement
- * @param {string} value
- * @returns {PlacementResult}
  */
-export function applyPlacement(existing, placement, value) {
+export function applyPlacement(existing: string | undefined, placement: Placement, value: string): PlacementResult {
 	switch (placement.mode) {
 		case "file":
 			return { content: value, summary: existing === undefined ? "created file" : "replaced file content" };
@@ -174,7 +145,7 @@ export function applyPlacement(existing, placement, value) {
 			if (re.test(base)) {
 				re.lastIndex = 0;
 				let count = 0;
-				const content = base.replace(re, (_match, /** @type {string} */ prefix, /** @type {string} */ old) => {
+				const content = base.replace(re, (_match, prefix: string, old: string) => {
 					count += 1;
 					const { comment } = splitEnvComment(old.replace(/\r$/, ""));
 					return `${prefix}${encoded}${comment}${old.endsWith("\r") ? "\r" : ""}`;
@@ -191,8 +162,7 @@ export function applyPlacement(existing, placement, value) {
 			let cursor = 0;
 			let count = 0;
 			re.lastIndex = 0;
-			/** @type {RegExpExecArray | null} */
-			let match;
+			let match: RegExpExecArray | null;
 			while ((match = re.exec(existing)) !== null) {
 				const span = match.indices?.[1] ?? match.indices?.[0];
 				if (!span) break;
@@ -211,11 +181,8 @@ export function applyPlacement(existing, placement, value) {
 
 /**
  * Check that `content` holds `value` at the placement. Used after a write.
- * @param {string} content
- * @param {Placement} placement
- * @param {string} value
  */
-export function verifyPlaced(content, placement, value) {
+export function verifyPlaced(content: string, placement: Placement, value: string): boolean {
 	if (placement.mode === "file") return content === value;
 	if (placement.mode === "env") return extractSecret(content, placement) === value;
 	return content.includes(value);
@@ -223,23 +190,18 @@ export function verifyPlaced(content, placement, value) {
 
 /**
  * Recover the stored secret from file content, for redaction after a restart.
- * @param {string} content
- * @param {Placement} placement
- * @returns {string | undefined}
  */
-export function extractSecret(content, placement) {
+export function extractSecret(content: string, placement: Placement): string | undefined {
 	switch (placement.mode) {
 		case "file":
 			return content.length > 0 ? content : undefined;
 		case "env": {
-			/** @type {string | undefined} */
-			let last;
+			let last: string | undefined;
 			for (const match of content.matchAll(envLinePattern(placement.key))) last = decodeEnvValue(match[2] ?? "");
 			return last ? last : undefined;
 		}
 		case "regex": {
-			/** @type {RegExp} */
-			let re;
+			let re: RegExp;
 			try {
 				re = compileRegex(placement.pattern, placement.flags);
 			} catch {
@@ -253,8 +215,7 @@ export function extractSecret(content, placement) {
 	}
 }
 
-/** @param {Placement} placement */
-export function describePlacement(placement) {
+export function describePlacement(placement: Placement): string {
 	switch (placement.mode) {
 		case "file":
 			return "whole file";

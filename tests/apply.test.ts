@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildApplyCommand, waitForResult } from "../src/stage.ts";
 
-const script = fileURLToPath(new URL("../bin/apply.mjs", import.meta.url));
+const script = fileURLToPath(new URL("../dist/apply.js", import.meta.url));
 const SECRET = "p@ss w'rd$X`y\\z-0123456789";
 
 function setup() {

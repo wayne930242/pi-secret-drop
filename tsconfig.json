@@ -9,9 +9,7 @@
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
     "skipLibCheck": true,
-    "allowJs": true,
-    "checkJs": true,
     "types": ["node"]
   },
-  "include": ["src", "lib", "bin", "tests"]
+  "include": ["src", "lib", "tests"]
 }

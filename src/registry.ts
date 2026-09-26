@@ -4,7 +4,7 @@
 
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { Placement } from "../lib/placement.mjs";
+import type { Placement } from "../lib/placement.ts";
 
 export interface RegistryEntry {
 	/** Canonical absolute path. */

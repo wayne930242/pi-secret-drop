@@ -1,31 +1,33 @@
-#!/usr/bin/env node
-// @ts-check
 /**
  * Apply a staged secret to its destination. The user runs this through a pi `!` command, so its
  * output reaches the model: it reports what changed and a length check, never the value.
+ * Compiled to dist/apply.js, which the prefilled command runs with node.
  */
 
 import { spawn } from "node:child_process";
 import { open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { checkValue, describePlacement, ENV_QUOTES, validatePlacement } from "../lib/placement.mjs";
-import { shellQuote } from "../lib/shell.mjs";
-import { parseFileMode, readExisting, writeSecret } from "../lib/write.mjs";
+import { checkValue, describePlacement, ENV_QUOTES, type EnvQuote, type Placement, validatePlacement } from "./placement.ts";
+import { shellQuote } from "./shell.ts";
+import { parseFileMode, readExisting, writeSecret } from "./write.ts";
 
-/** @typedef {import("../lib/placement.mjs").Placement} Placement */
-/** @typedef {{ quote?: string, flags?: string, mode?: string, overwrite?: boolean }} Options */
+interface Options {
+	quote?: string;
+	flags?: string;
+	mode?: string;
+	overwrite?: boolean;
+}
 
 const USAGE = `usage:
-  apply.mjs env <destination> <KEY> --from <staged> [--quote auto|none|single|double] [--mode 600]
-  apply.mjs regex <destination> <regex> --from <staged> [--flags g] [--mode 600]
-  apply.mjs file <destination> --from <staged> [--overwrite] [--mode 600]
-  apply.mjs exec <command using {secret}> --from <staged>`;
+  apply.js env <destination> <KEY> --from <staged> [--quote auto|none|single|double] [--mode 600]
+  apply.js regex <destination> <regex> --from <staged> [--flags g] [--mode 600]
+  apply.js file <destination> --from <staged> [--overwrite] [--mode 600]
+  apply.js exec <command using {secret}> --from <staged>`;
 
 /**
  * Overwrite then delete the staged file.
- * @param {string} path
  */
-async function wipe(path) {
+async function wipe(path: string): Promise<void> {
 	try {
 		const { size } = await stat(path);
 		const handle = await open(path, "r+");
@@ -40,39 +42,30 @@ async function wipe(path) {
 	await rm(path, { force: true });
 }
 
-/**
- * @param {string} value
- * @param {string} text
- */
-function redact(value, text) {
+function redact(value: string, text: string): string {
 	return value.length > 0 ? text.split(value).join("[REDACTED]") : text;
 }
 
-/** @param {string} value */
-function chars(value) {
+function chars(value: string): number {
 	return [...value].length;
 }
 
 /**
  * Run a shell command with {secret} replaced by the staged file path. Stdout is discarded.
- * @param {string} command
- * @param {string} staged
- * @param {string} value
  */
-async function runCommand(command, staged, value) {
+async function runCommand(command: string, staged: string, value: string): Promise<string> {
 	if (!command.includes("{secret}")) throw new Error("exec command must reference {secret}.");
 	const script = command.split("{secret}").join(shellQuote(staged));
 	const child = spawn("sh", ["-c", script], { stdio: ["ignore", "pipe", "pipe"] });
 	let stdoutBytes = 0;
 	let stderr = "";
-	child.stdout.on("data", (/** @type {Buffer} */ chunk) => {
+	child.stdout.on("data", (chunk: Buffer) => {
 		stdoutBytes += chunk.length;
 	});
-	child.stderr.on("data", (/** @type {Buffer} */ chunk) => {
+	child.stderr.on("data", (chunk: Buffer) => {
 		stderr += chunk.toString("utf8");
 	});
-	/** @type {number | null} */
-	const code = await new Promise((resolve, reject) => {
+	const code = await new Promise<number | null>((resolve, reject) => {
 		child.on("error", reject);
 		child.on("close", resolve);
 	});
@@ -84,27 +77,18 @@ async function runCommand(command, staged, value) {
 	return `command exited 0 — secret delivered via {secret} (${chars(value)} chars)${suppressed}`;
 }
 
-/**
- * @param {string | undefined} format
- * @param {string[]} args
- * @param {Options} options
- * @param {string} staged
- * @param {string} value
- */
-async function apply(format, args, options, staged, value) {
+async function apply(format: string | undefined, args: string[], options: Options, staged: string, value: string): Promise<string> {
 	if (format === "exec") {
 		if (args.length !== 1 || !args[0]) throw new Error(USAGE);
 		return runCommand(args[0], staged, value);
 	}
 
-	/** @type {Placement} */
-	let placement;
+	let placement: Placement;
 	const destination = args[0];
 	if (format === "env" && args.length === 2 && destination && args[1]) {
 		const quote = options.quote ?? "auto";
-		const known = /** @type {readonly string[]} */ (ENV_QUOTES);
-		if (!known.includes(quote)) throw new Error(`Invalid quote "${quote}".`);
-		placement = { mode: "env", key: args[1], quote: /** @type {import("../lib/placement.mjs").EnvQuote} */ (quote) };
+		if (!(ENV_QUOTES as readonly string[]).includes(quote)) throw new Error(`Invalid quote "${quote}".`);
+		placement = { mode: "env", key: args[1], quote: quote as EnvQuote };
 	} else if (format === "regex" && args.length === 2 && destination && args[1]) {
 		placement = { mode: "regex", pattern: args[1], flags: options.flags ?? "" };
 	} else if (format === "file" && args.length === 1 && destination) {
@@ -152,7 +136,7 @@ async function main() {
 		await writeFile(resultFile, JSON.stringify({ ok: true, message }), { mode: 0o600 });
 		console.log(`✓ secret-drop: ${message}`);
 	} catch (error) {
-		const message = redact(value, /** @type {Error} */ (error).message);
+		const message = redact(value, (error as Error).message);
 		await writeFile(resultFile, JSON.stringify({ ok: false, message }), { mode: 0o600 }).catch(() => undefined);
 		console.error(`✗ secret-drop: ${message}`);
 		process.exitCode = 1;

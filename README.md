@@ -7,7 +7,7 @@ A [pi](https://pi.dev) extension that lets the agent put secrets into files and 
 3. The value is staged in `~/.pi/agent/secret-drop/staging/` (mode 600), and pi pre-fills a `!` command in the user's prompt:
 
    ```
-   ! node ~/.pi/agent/npm/node_modules/pi-secret-drop/bin/apply.mjs env ./.env DB_PASSWORD --from ~/.pi/agent/secret-drop/staging/64770-948e1cb74b5a
+   ! node ~/.pi/agent/npm/node_modules/pi-secret-drop/dist/apply.js env ./.env DB_PASSWORD --from ~/.pi/agent/secret-drop/staging/64770-948e1cb74b5a
    ```
 
 4. The user reviews it and presses Enter. The apply script writes the destination, deletes the staged file, and prints only a report:
@@ -25,7 +25,7 @@ The agent never opens the destination: the user runs the write with a command th
 │ DB_PASSWORD                                                    │
 │                                                                │
 │ Into      ./.env (env DB_PASSWORD)                             │
-│ Then run  ! node …/apply.mjs env ./.env DB_PASSWORD --from     │
+│ Then run  ! node …/apply.js env ./.env DB_PASSWORD --from      │
 │           ~/.pi/agent/secret-drop/staging/64770-948e1cb74b5a   │
 │                                                                │
 │ › ••••••••••••••••••••••••••••                                 │
@@ -92,11 +92,11 @@ Writes are atomic (temp file + rename) and verified by re-reading the destinatio
 
 ```bash
 npm install
-npm run check   # tsc --noEmit, including the JSDoc-typed lib/ and bin/
-npm test        # node --test
+npm run check   # tsc --noEmit
+npm test        # builds dist/, then node --test
 ```
 
-`lib/` and `bin/` are plain JavaScript so the apply script runs with `node` from an npm install, where Node does not strip TypeScript types.
+`lib/` holds the placement and write logic shared by the extension and the apply script. The extension imports it as TypeScript, so pi's `/reload` picks up an upgrade; Node caches `.js` and `.mjs` modules for the life of the process. `npm run build` compiles `lib/` to `dist/` for the apply script, which runs with plain `node` because Node does not strip TypeScript types under `node_modules`. `npm pack` and `npm publish` build first.
 
 Releases publish from GitHub Actions through npm trusted publishing: bump `version` in `package.json`, commit, and push a matching `v<version>` tag.
 

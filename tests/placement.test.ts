@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyPlacement, checkValue, extractSecret, type Placement, validatePlacement, verifyPlaced } from "../lib/placement.mjs";
+import { applyPlacement, checkValue, extractSecret, type Placement, validatePlacement, verifyPlaced } from "../lib/placement.ts";
 
 const env = (key: string): Placement => ({ mode: "env", key, quote: "auto" });
 

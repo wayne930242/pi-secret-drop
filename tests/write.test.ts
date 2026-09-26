@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Registry } from "../src/registry.ts";
-import { writeSecret } from "../lib/write.mjs";
+import { writeSecret } from "../lib/write.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "secret-drop-write-"));
 

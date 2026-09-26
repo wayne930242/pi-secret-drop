@@ -6,8 +6,8 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
-import type { Placement } from "../lib/placement.mjs";
-import { shellQuote } from "../lib/shell.mjs";
+import type { Placement } from "../lib/placement.ts";
+import { shellQuote } from "../lib/shell.ts";
 
 export type ApplyPlan =
 	| { format: "placement"; destination: string; placement: Placement; fileMode?: string; overwrite?: boolean }

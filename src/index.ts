@@ -11,8 +11,8 @@ import { access } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
-import { checkOverwrite, checkValue, describePlacement, extractSecret, type Placement, validateSyntax } from "../lib/placement.mjs";
-import { parseFileMode, readExisting } from "../lib/write.mjs";
+import { checkOverwrite, checkValue, describePlacement, extractSecret, type Placement, validateSyntax } from "../lib/placement.ts";
+import { parseFileMode, readExisting } from "../lib/write.ts";
 import { canonicalPath, checkToolCall } from "./guard.ts";
 import { Redactor } from "./redact.ts";
 import { Registry } from "./registry.ts";
@@ -28,7 +28,7 @@ import {
 	waitForResult,
 } from "./stage.ts";
 
-const APPLY_SCRIPT = fileURLToPath(new URL("../bin/apply.mjs", import.meta.url));
+const APPLY_SCRIPT = fileURLToPath(new URL("../dist/apply.js", import.meta.url));
 
 interface DropDetails {
 	target: string;

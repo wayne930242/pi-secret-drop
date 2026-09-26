@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Atomic file write for a placed secret.
  */
@@ -6,33 +5,30 @@
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { applyPlacement, verifyPlaced } from "./placement.mjs";
+import { applyPlacement, type Placement, verifyPlaced } from "./placement.ts";
 
-/** @typedef {import("./placement.mjs").Placement} Placement */
-/** @typedef {{ bytes: number, created: boolean, mode: number, summary: string }} WriteOutcome */
+export interface WriteOutcome {
+	bytes: number;
+	created: boolean;
+	mode: number;
+	summary: string;
+}
 
 export const DEFAULT_NEW_FILE_MODE = 0o600;
 
-/**
- * @param {string} path
- * @returns {Promise<string | undefined>}
- */
-export async function readExisting(path) {
+export async function readExisting(path: string): Promise<string | undefined> {
 	try {
 		return await readFile(path, "utf8");
 	} catch (error) {
-		if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return undefined;
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
 		throw error;
 	}
 }
 
 /**
  * Replace `path` with `content` through a temp file and rename, so readers never see a partial file.
- * @param {string} path
- * @param {string} content
- * @param {number} mode
  */
-async function atomicWrite(path, content, mode) {
+async function atomicWrite(path: string, content: string, mode: number): Promise<void> {
 	const tmp = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString("hex")}.tmp`);
 	try {
 		await writeFile(tmp, content, { mode: 0o600, flag: "wx" });
@@ -49,14 +45,14 @@ async function atomicWrite(path, content, mode) {
  * When the check fails, the original content and mode are restored from memory (a new file is
  * removed) and the call throws; no backup file is ever written.
  * New files get `fileMode ?? 0600`; existing files keep their mode unless `fileMode` is given.
- * @param {string} path
- * @param {Placement} placement
- * @param {string} value
- * @param {number | undefined} fileMode
- * @param {(content: string, placement: Placement, value: string) => boolean} [verify]
- * @returns {Promise<WriteOutcome>}
  */
-export async function writeSecret(path, placement, value, fileMode, verify = verifyPlaced) {
+export async function writeSecret(
+	path: string,
+	placement: Placement,
+	value: string,
+	fileMode: number | undefined,
+	verify: (content: string, placement: Placement, value: string) => boolean = verifyPlaced,
+): Promise<WriteOutcome> {
 	const existing = await readExisting(path);
 	const { content, summary } = applyPlacement(existing, placement, value);
 	const created = existing === undefined;
@@ -75,10 +71,8 @@ export async function writeSecret(path, placement, value, fileMode, verify = ver
 
 /**
  * Parse an octal permission string such as "600".
- * @param {string | undefined} raw
- * @returns {number | undefined}
  */
-export function parseFileMode(raw) {
+export function parseFileMode(raw: string | undefined): number | undefined {
 	if (raw === undefined) return undefined;
 	if (!/^0?[0-7]{3}$/.test(raw)) throw new Error(`Invalid file mode "${raw}". Use octal like "600".`);
 	return Number.parseInt(raw, 8);
