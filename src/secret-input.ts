@@ -10,6 +10,7 @@ import {
 	getKeybindings,
 	isKeyRelease,
 	matchesKey,
+	type OverlayOptions,
 	truncateToWidth,
 	visibleWidth,
 	wrapTextWithAnsi,
@@ -29,6 +30,15 @@ export interface SecretPrompt {
 	footer: string;
 	/** Return an error message to keep the dialog open, or undefined to accept. */
 	check: (value: string) => string | undefined;
+}
+
+/**
+ * `ctx.ui.custom` options for the dialog. Pi-TUI overlays cannot draw over rows holding terminal
+ * images, so `PI_ASK_USER_DISPLAY_MODE=inline` (shared with pi-ask-user) renders it inline instead.
+ */
+export function dialogOptions(env: NodeJS.ProcessEnv = process.env): { overlay: boolean; overlayOptions?: OverlayOptions } {
+	if (env.PI_ASK_USER_DISPLAY_MODE === "inline") return { overlay: false };
+	return { overlay: true, overlayOptions: { anchor: "center", width: "70%", minWidth: 50, maxHeight: "85%", margin: 1 } };
 }
 
 function isPrintable(data: string): boolean {

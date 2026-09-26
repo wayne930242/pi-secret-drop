@@ -82,6 +82,7 @@ Writes are atomic (temp file + rename) and verified by re-reading the destinatio
 ## Limits
 
 - Requires the interactive terminal UI. In RPC, JSON, and print modes the tool fails instead of falling back to a plain-text prompt.
+- The dialog is a centered overlay, which pi-tui cannot draw over rows holding terminal images. Set `PI_ASK_USER_DISPLAY_MODE=inline` (the variable pi-ask-user reads) in the shell that launches pi to render it inline instead.
 - The bash guard parses command lines, not programs. It stops accidental reads, not a determined agent: an indirect path (a variable, a glob, a script or `python -c` that prints the file) passes through. Redaction is the second layer for that output.
 - The rename replaces the destination's inode: hard links to it break and the file becomes owned by the user who runs the apply command. Symlinks are resolved and kept.
 - A multi-line quoted `KEY="…` value is replaced on its first line only.

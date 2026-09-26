@@ -16,7 +16,7 @@ import { parseFileMode, readExisting } from "../lib/write.ts";
 import { canonicalPath, checkToolCall } from "./guard.ts";
 import { Redactor } from "./redact.ts";
 import { Registry } from "./registry.ts";
-import { SecretInput } from "./secret-input.ts";
+import { dialogOptions, SecretInput } from "./secret-input.ts";
 import {
 	type ApplyPlan,
 	buildApplyCommand,
@@ -221,10 +221,7 @@ export default function secretDrop(pi: ExtensionAPI) {
 						else signal?.addEventListener("abort", () => input.cancel(), { once: true });
 						return input;
 					},
-					{
-						overlay: true,
-						overlayOptions: { anchor: "center", width: "70%", minWidth: 50, maxHeight: "85%", margin: 1 },
-					},
+					dialogOptions(),
 				);
 				if (value === null || value === undefined) {
 					return {
