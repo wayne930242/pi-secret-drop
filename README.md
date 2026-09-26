@@ -7,7 +7,7 @@ A [pi](https://pi.dev) extension that lets the agent put secrets into files and 
 3. The value is staged in `~/.pi/agent/secret-drop/staging/` (mode 600), and pi pre-fills a `!` command in the user's prompt:
 
    ```
-   ! node ~/.pi/agent/git/github.com/wayne930242/pi-secret-drop/bin/apply.mjs env ./.env DB_PASSWORD --from ~/.pi/agent/secret-drop/staging/64770-948e1cb74b5a
+   ! node ~/.pi/agent/npm/node_modules/pi-secret-drop/bin/apply.mjs env ./.env DB_PASSWORD --from ~/.pi/agent/secret-drop/staging/64770-948e1cb74b5a
    ```
 
 4. The user reviews it and presses Enter. The apply script writes the destination, deletes the staged file, and prints only a report:
@@ -38,7 +38,7 @@ The agent never opens the destination: the user runs the write with a command th
 ## Install
 
 ```bash
-pi install git:github.com/wayne930242/pi-secret-drop
+pi install npm:pi-secret-drop
 ```
 
 The package ships the extension and a `secret-drop` skill that teaches the agent to use it and to let programs consume secret files.
@@ -94,6 +94,8 @@ npm test        # node --test
 ```
 
 `lib/` and `bin/` are plain JavaScript so the apply script runs with `node` from an npm install, where Node does not strip TypeScript types.
+
+Releases publish from GitHub Actions through npm trusted publishing: bump `version` in `package.json`, commit, and push a matching `v<version>` tag.
 
 ## License
 
