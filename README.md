@@ -74,14 +74,14 @@ Writes are atomic (temp file + rename) and verified by re-reading the destinatio
 
 ## Protection after the write
 
-- **Blocked reads.** `read`, `edit`, `write`, and `grep` on a destination or the staging area are blocked, as are bash commands that print, copy, or open them (`cat`, `head`, `grep`, `sed`, `cp`, `base64`, `< file`, …). Commands that only pass the path to a consumer still run.
+- **Blocked reads.** `read`, `edit`, `write`, and `grep` on a destination or the staging area are blocked. In bash, each simple command is checked on its own: it is blocked when a protected path is an argument of a command that prints, copies, or opens files (`cat`, `head`, `grep`, `sed`, `cp`, `base64`, …, also behind `sudo`, `env`, `timeout`, `xargs`), a `<` or `>` redirection target, or inside `sh -c`, `eval`, `$(…)`, or backticks. Commands that only pass the path to a consumer, such as `--env-file .env` or `test -s .env`, still run.
 - **Redaction.** Any tool result or context message containing a secret value is rewritten to `[REDACTED]`. Values are reloaded from protected destinations at session start.
 - **Registry.** Protected locations (never values) live in `~/.pi/agent/secret-drop/registry.json`. `/secret-drop` lists them; `/secret-drop forget <path>` removes one.
 
 ## Limits
 
 - Requires the interactive terminal UI. In RPC, JSON, and print modes the tool fails instead of falling back to a plain-text prompt.
-- The bash guard matches command tokens against protected paths. It stops accidental reads, not a determined agent: an indirect path (a variable, a glob, a script that prints the file) passes through. Redaction is the second layer for that output.
+- The bash guard parses command lines, not programs. It stops accidental reads, not a determined agent: an indirect path (a variable, a glob, a script or `python -c` that prints the file) passes through. Redaction is the second layer for that output.
 - Values shorter than 4 characters are not redacted. Values applied with `format: "command"` are redacted for the rest of the session only.
 - The apply command is shown before it runs; review it, since a `command` can send the staged value anywhere.
 
