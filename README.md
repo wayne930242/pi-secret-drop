@@ -2,8 +2,8 @@
 
 A [pi](https://pi.dev) extension that lets the agent put secrets into files and commands without ever seeing them.
 
-1. The agent calls `secret_drop` with a destination and a placement.
-2. Pi opens a masked dialog that shows exactly where the value will go and the command that will apply it. The user types or pastes the secret.
+1. The agent calls `secret_drop` with a destination, a placement, and the steps to get the secret.
+2. Pi opens a masked dialog that shows those steps, where the value will go, and what happens next. The user types or pastes the secret, or presses Tab to ask the agent a question instead.
 3. The value is staged in `~/.pi/agent/secret-drop/staging/` (mode 600), and pi pre-fills a `!` command in the user's prompt:
 
    ```
@@ -21,19 +21,28 @@ A [pi](https://pi.dev) extension that lets the agent put secrets into files and 
 The agent never opens the destination: the user runs the write with a command they can read. That also keeps secret-guarding extensions such as [cc-safety-net](https://github.com/kenryu42/cc-safety-net) in charge of the agent's tool calls, since pi's `!` commands are the user's own.
 
 ```
-╭─ Secret Drop ──────────────────────────────────────────────────╮
-│ DB_PASSWORD                                                    │
-│                                                                │
-│ Into      ./.env (env DB_PASSWORD)                             │
-│ Then run  ! node …/apply.js env ./.env DB_PASSWORD --from      │
-│           ~/.pi/agent/secret-drop/staging/64770-948e1cb74b5a   │
-│                                                                │
-│ › ••••••••••••••••••••••••••••                                 │
-│ 28 chars                                                       │
-│                                                                │
-│ Enter stage · Esc cancel · Ctrl+R show/hide · Ctrl+U clear     │
-╰────────────────────────────────────────────────────────────────╯
+╭─ Secret Drop ──────────────────────────────────────────────────────────────╮
+│ Staging database password                                                  │
+│                                                                            │
+│ How to get it                                                              │
+│ 1. Open the staging project in 1Password                                   │
+│ 2. Copy the password of the "db-staging" item                              │
+│                                                                            │
+│ Goes to  ./.env (env DB_PASSWORD)                                          │
+│ Next     Enter here stages the value. Your prompt then holds a ! command;  │
+│          press Enter on it to apply. The agent never sees the value.       │
+│                                                                            │
+│ › ••••••••••••••••••••••••••••                                             │
+│   28 chars                                                                 │
+│                                                                            │
+│ Enter stage · Tab ask a question instead · Esc cancel · Ctrl+R show/hide · │
+│ Ctrl+U clear                                                               │
+│ Stuck or unsure? Press Tab and ask; the dialog closes and the agent        │
+│ answers.                                                                   │
+╰────────────────────────────────────────────────────────────────────────────╯
 ```
+
+Tab opens a visible question field. Enter there closes the dialog without staging anything, discards what was typed in the secret field, and returns the question to the agent, which answers and calls `secret_drop` again. When the steps do not fit the terminal, the dialog shortens them; the tool call in the chat shows them in full.
 
 ## Install
 
@@ -62,7 +71,9 @@ They do not conflict. cc-safety-net inspects the agent's tool calls; the apply c
 
 | Parameter | Meaning |
 |---|---|
-| `label` | What the user should enter. |
+| `label` | What the user should enter, in the user's language. |
+| `instructions` | Required. Numbered steps, in the user's language: where to go (URL or menu path), what to fill in, and what to copy. One step for a value the user already knows. |
+| `url` | The page where the user creates or finds the secret. |
 | `format` | `env`, `regex`, `file`, or `command`. Defaults to `env` when `key` is set, `command` when `command` is set, else `file`. |
 | `destination` | `env` / `regex` / `file`: target file, relative to the working directory. Missing directories are created. |
 | `key`, `quote` | `env`: variable name and quoting (`auto`, `none`, `single`, `double`). Existing `KEY=` / `export KEY=` lines are replaced, keeping trailing `# comments` and CRLF endings; otherwise the line is appended. Use `none` for files read by `docker --env-file`, which keeps quotes as part of the value. |

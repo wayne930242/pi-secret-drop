@@ -16,7 +16,7 @@ import { parseFileMode, readExisting } from "../lib/write.ts";
 import { canonicalPath, checkToolCall } from "./guard.ts";
 import { Redactor } from "./redact.ts";
 import { Registry } from "./registry.ts";
-import { dialogOptions, SecretInput } from "./secret-input.ts";
+import { type DialogResult, dialogOptions, SecretInput } from "./secret-input.ts";
 import {
 	type ApplyPlan,
 	buildApplyCommand,
@@ -33,12 +33,19 @@ const APPLY_SCRIPT = fileURLToPath(new URL("../dist/apply.js", import.meta.url))
 interface DropDetails {
 	target: string;
 	command: string;
-	status: "entering" | "staged" | "cancelled" | "applied";
+	status: "entering" | "staged" | "cancelled" | "question" | "applied";
 	message?: string;
 }
 
 const Params = Type.Object({
-	label: Type.String({ description: "What the user should enter, e.g. 'Azure SP client secret for ginlee'." }),
+	label: Type.String({ description: "What the user should enter, e.g. 'Azure SP client secret for ginlee'. In the user's language." }),
+	instructions: Type.Array(Type.String({ minLength: 1 }), {
+		minItems: 1,
+		maxItems: 10,
+		description:
+			"Numbered steps shown above the input, in the user's language, so they can get the value without asking: where to go (exact URL or menu path), what to click and fill in (name, scope, permissions, expiration), and what to copy. For a value the user already knows, one step saying which one to type.",
+	}),
+	url: Type.Optional(Type.String({ description: "The page where the user creates or finds the secret, shown as a link." })),
 	format: Type.Optional(
 		StringEnum(["env", "regex", "file", "command"] as const, {
 			description:
@@ -82,6 +89,11 @@ interface DropParams {
 	fileMode?: string;
 	overwrite?: boolean;
 	command?: string;
+}
+
+/** What the tool returns when the user asked a question instead of entering the secret. */
+export function questionResult(text: string): string {
+	return `The user did not enter the secret and asked instead: "${text}". Nothing was staged. Answer the question in chat, then call secret_drop again when they are ready.`;
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -171,11 +183,13 @@ export default function secretDrop(pi: ExtensionAPI) {
 		name: "secret_drop",
 		label: "Secret Drop",
 		description:
-			"Have the user enter a secret without it entering the conversation. The user types it into a masked dialog; it is staged outside the project, and a `!` apply command is pre-filled in the user's prompt. The tool waits until the user runs that command, then returns the apply script's report: what changed and a length check, never the value. Destinations are protected afterwards: reading or printing them is blocked and the value is redacted from tool output.",
+			"Have the user enter a secret without it entering the conversation. The user follows the instructions you give and types it into a masked dialog, or presses Tab to ask you a question instead, which the tool returns; it is staged outside the project, and a `!` apply command is pre-filled in the user's prompt. The tool waits until the user runs that command, then returns the apply script's report: what changed and a length check, never the value. Destinations are protected afterwards: reading or printing them is blocked and the value is redacted from tool output.",
 		promptSnippet: "Have the user put a secret into a file or command without the agent seeing it",
 		promptGuidelines: [
 			"Use secret_drop whenever a password, token, key, or other credential must land in a file or be fed to a command; never ask the user to paste secrets into chat.",
 			"Files that hold secrets are consumed by programs, never read or printed by the agent.",
+			"Give secret_drop instructions the user can follow without asking: the exact page or menu, every field to fill in, and what to copy; write them and the label in the user's language.",
+			"When secret_drop returns a question from the user, answer it, then call secret_drop again.",
 		],
 		parameters: Params,
 		executionMode: "sequential",
@@ -192,6 +206,8 @@ export default function secretDrop(pi: ExtensionAPI) {
 			const target =
 				plan.format === "exec" ? "command" : `${displayPath(plan.destination, ctx.cwd)} (${describePlacement(plan.placement)})`;
 			const details: DropDetails = { target, command, status: "entering" };
+			const next =
+				"Enter here stages the value. Your prompt then holds a ! command; press Enter on it to apply. The agent never sees the value.";
 			const check = (candidate: string): string | undefined =>
 				plan.format === "exec" ? (candidate.length === 0 ? "Value is empty." : undefined) : checkValue(plan.placement, candidate);
 
@@ -199,18 +215,20 @@ export default function secretDrop(pi: ExtensionAPI) {
 			pi.events.emit("herdr:blocked", { active: true, label: "Waiting for secret input" });
 			let draft: string | undefined;
 			try {
-				const value = await ctx.ui.custom<string | null>(
+				const choice = await ctx.ui.custom<DialogResult | null>(
 					(tui, theme, _keybindings, done) => {
 						const input = new SecretInput(
 							{
 								title: "Secret Drop",
 								label: params.label,
+								steps: params.instructions,
+								url: params.url,
 								rows: [
-									["Into", target],
-									["Then run", command],
+									["Goes to", plan.format === "exec" ? `the command ${params.command}` : target],
+									["Next", next],
 								],
 								warning: replacesFile ? "Replaces the entire existing file" : undefined,
-								footer: "The value is staged outside the project; the prefilled ! command applies it. The agent never receives it.",
+								footer: "Stuck or unsure? Press Tab and ask; the dialog closes and the agent answers.",
 								check,
 							},
 							theme,
@@ -223,12 +241,19 @@ export default function secretDrop(pi: ExtensionAPI) {
 					},
 					dialogOptions(),
 				);
-				if (value === null || value === undefined) {
+				if (choice === null || choice === undefined) {
 					return {
 						content: [{ type: "text", text: "User cancelled; nothing was staged or applied." }],
 						details: { ...details, status: "cancelled" },
 					};
 				}
+				if (choice.kind === "question") {
+					return {
+						content: [{ type: "text", text: questionResult(choice.text) }],
+						details: { ...details, status: "question", message: choice.text },
+					};
+				}
+				const value = choice.value;
 
 				redactor.add(value);
 				await stageSecret(staged, value, stagingDir);
@@ -272,7 +297,11 @@ export default function secretDrop(pi: ExtensionAPI) {
 
 		renderCall(args, theme) {
 			const where = args.destination ?? args.command ?? "";
-			return new Text(`${theme.fg("toolTitle", theme.bold("secret_drop "))}${theme.fg("muted", where)} ${theme.fg("dim", args.label)}`, 0, 0);
+			const head = `${theme.fg("toolTitle", theme.bold("secret_drop "))}${theme.fg("muted", where)} ${theme.fg("dim", args.label)}`;
+			// The steps stay readable here when the dialog has to shorten them.
+			const steps = (args.instructions ?? []).map((step, i) => `  ${theme.fg("accent", `${i + 1}.`)} ${step}`);
+			const url = args.url ? [`  ${theme.fg("muted", "Open")} ${theme.fg("accent", args.url)}`] : [];
+			return new Text([head, ...steps, ...url].join("\n"), 0, 0);
 		},
 
 		renderResult(result, _options, theme) {
@@ -284,6 +313,7 @@ export default function secretDrop(pi: ExtensionAPI) {
 			if (details.status === "entering") return new Text(theme.fg("dim", `Waiting for secret input → ${details.target}`), 0, 0);
 			if (details.status === "staged") return new Text(theme.fg("dim", `Staged — press Enter on: ${details.command}`), 0, 0);
 			if (details.status === "cancelled") return new Text(theme.fg("warning", "Cancelled — nothing applied"), 0, 0);
+			if (details.status === "question") return new Text(theme.fg("warning", `Asked instead — nothing applied: ${details.message ?? ""}`), 0, 0);
 			return new Text(`${theme.fg("success", "✓ ")}${theme.fg("text", details.message ?? details.target)}`, 0, 0);
 		},
 	});
