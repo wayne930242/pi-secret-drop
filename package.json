@@ -1,6 +1,6 @@
 {
   "name": "pi-secret-drop",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Pi extension: the user types a secret into a masked dialog and applies it with a transparent ! command, so the agent never sees it",
   "type": "module",
   "license": "MIT",
