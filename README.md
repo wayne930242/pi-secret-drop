@@ -1,5 +1,10 @@
 # pi-secret-drop
 
+> **Merged into [pi-robot-hand](https://github.com/wayne930242/pi-robot-hand).**
+> Since pi-robot-hand 0.2.0, `secret_drop`, its `secret-drop` skill, and the `/secret-drop` command ship there, and this package gets no further updates.
+> Switch with `pi remove npm:pi-secret-drop` and `pi install npm:pi-robot-hand`; protected files and the registry in `~/.pi/agent/secret-drop/` carry over.
+> While both are installed, pi-robot-hand leaves `secret_drop` to this package and warns you to remove it, since pi refuses to load two tools with the same name.
+
 A [pi](https://pi.dev) extension that lets the agent put secrets into files and commands without ever seeing them.
 
 1. The agent calls `secret_drop` with a destination, a placement, and the steps to get the secret.
